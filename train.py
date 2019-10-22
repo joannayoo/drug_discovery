@@ -89,28 +89,16 @@ def train(epoch):
                        D=D.squeeze())
         loss_train = F.nll_loss(output.unsqueeze(0), label.long())
         acc_train = accuracy(output, label)
+        print(loss_train)
+        print(acc_train)
         loss_train.backward()
         optimizer.step()
     
-    if not args.fastmode:
-        # Evaluate validation set performance separately,
-        # deactivates dropout during validation run.
-        model.eval()
-        output = model(features, adj)
-
-    for feature, label in val_loader:
-        X, A, D = feature
-        output = model(X=X.squeeze(), 
-                       A=A.squeeze(), 
-                       D=D.squeeze())
-        loss_val = F.nll_loss(output, label)
-        acc_val = accuracy(output, label)
-
     print('Epoch: {:04d}'.format(epoch+1),
           'loss_train: {:.4f}'.format(loss_train.data.item()),
           'acc_train: {:.4f}'.format(acc_train.data.item()),
-          'loss_val: {:.4f}'.format(loss_val.data.item()),
-          'acc_val: {:.4f}'.format(acc_val.data.item()),
+          #'loss_val: {:.4f}'.format(loss_val.data.item()),
+          #'acc_val: {:.4f}'.format(acc_val.data.item()),
           'time: {:.4f}s'.format(time.time() - t))
     
     return loss_val.data.item()
@@ -141,6 +129,23 @@ for epoch in range(args.epochs):
     try:
         loss_values.append(train(epoch))
 
+        if epoch % 20 == 0:
+            model.train()
+            for feature, label in val_loader:
+                X, A, D = feature
+                output = model(X=X.squeeze(), 
+                            A=A.squeeze(), 
+                            D=D.squeeze())
+                loss_val = F.nll_loss(output, label)
+                acc_val = accuracy(output, label)
+
+            print('Epoch: {:04d}'.format(epoch+1),
+                  #'loss_train: {:.4f}'.format(loss_train.data.item()),
+                  #'acc_train: {:.4f}'.format(acc_train.data.item()),
+                  'loss_val: {:.4f}'.format(loss_val.data.item()),
+                  'acc_val: {:.4f}'.format(acc_val.data.item()),
+                  #'time: {:.4f}s'.format(time.time() - t)
+                  )
         torch.save(model.state_dict(), '{}.pkl'.format(epoch))
         if loss_values[-1] < best:
             best = loss_values[-1]

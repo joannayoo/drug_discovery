@@ -1,6 +1,7 @@
 from rdkit import Chem
 from rdkit.Chem import rdmolfiles
 from rdkit.Chem import rdmolops
+from rdkit.Chem import AllChem
 import numpy as np
 import mdtraj as md
 import tempfile
@@ -177,13 +178,14 @@ def pdb2graph(pdbid, data_dir='./data/pdbbind/v2018'):
     protein_traj = md.load(protein_pdb_file)
     ligand_traj = md.load(ligand_pdb_file)
 
-    complex_traj = combine_mdtraj(protein_traj, ligand_traj)
+    complex_traj = combine_mdtraj(md.load(protein_pdb_file), 
+                                  md.load(ligand_pdb_file))
     tempdir = tempfile.mkdtemp()
     complex_traj.save(os.path.join(tempdir, 'complex.pdb'))
 
     protein = rdmolfiles.MolFromPDBFile(protein_pdb_file)
     ligand = rdmolfiles.MolFromPDBFile(ligand_pdb_file)
-    compl = rdmolfiles.MolFromPDBFile(os.path.join(tempdir, 'complex.pdb'))
+    compl = AllChem.MolFromPDBFile(os.path.join(tempdir, 'complex.pdb'))
         
     return (build_graph_from_molecule(protein),
             build_graph_from_molecule(ligand),
