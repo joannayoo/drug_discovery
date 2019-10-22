@@ -34,3 +34,4 @@ h5py=2.10.0
 nglview=2.7.1
 mdtraj=1.9.3
 biopython=1.17.2
+torch=0.4.1
