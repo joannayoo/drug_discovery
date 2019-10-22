@@ -31,7 +31,7 @@ if args.cuda:
 
 # Load data
 dataset = PDBBindDataset(num_positive=args.num_positive,
-                         num_negative=args.num_negative)/
+                         num_negative=args.num_negative)
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
 split = int(np.floor(args.train_test_split * dataset_size))
@@ -91,8 +91,10 @@ def train(epoch):
                            A=A.squeeze(), 
                            D=D.squeeze())
             loss_train = F.nll_loss(output.unsqueeze(0), label.long())
+            acc_train = accuracy(output, label)
+
             losses_batch.append(loss_train)
-            acc_batch.append(accuracy(output, label))
+            acc_batch.append(acc_train)
 
             loss_train.backward()
             optimizer.step()
@@ -114,7 +116,7 @@ def evaluate():
 
     losses_batch = []
     acc_batch = []
-    for _ in args.batch_size:
+    for _ in range(args.batch_size):
         try:
             (X, A, D), label = next(iter(val_loader))
 
@@ -127,8 +129,11 @@ def evaluate():
             output = model(X=X.squeeze(), 
                         A=A.squeeze(), 
                         D=D.squeeze())
-            loss_test = F.nll_loss(output.unsqueeze(0), label.long())
-            acc_test = accuracy(output, label)
+            loss_val = F.nll_loss(output.unsqueeze(0), label.long())
+            acc_val = accuracy(output, label)
+
+            losses_batch.append(loss_val)
+            acc_batch.append(acc_val)
         except BaseException as e:
             print(e)
         
@@ -145,7 +150,7 @@ def compute_test():
 
     losses_batch = []
     acc_batch = []
-    for _ in args.batch_size:
+    for _ in range(args.batch_size):
         try:
             (X, A, D), label = next(iter(test_loader))
 
@@ -160,9 +165,14 @@ def compute_test():
                         D=D.squeeze())
             loss_test = F.nll_loss(output.unsqueeze(0), label.long())
             acc_test = accuracy(output, label)
+            
+            losses_batch.append(loss_test)
+            acc_batch.append(acc_test)
         except BaseException as e:
             print(e)
-        
+    
+    print(losses_batch)
+    print(acc_batch)
     avg_loss = torch.mean(torch.Tensor(losses_batch))
     avg_acc = torch.mean(torch.Tensor(acc_batch))
 
