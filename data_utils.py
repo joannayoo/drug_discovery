@@ -29,9 +29,7 @@ class PDBBindDataset(Dataset):
             X, A, D = get_pdbbind_features(pdbid, data_dir=self.data_dir)        
             # label = one_hot_encoding(self.data.loc[index, 'label'], {0, 1})
             label = self.data.loc[index, 'label']
-            return (torch.Tensor(X), 
-                    torch.Tensor(A), 
-                    torch.Tensor(D)), label
+            return (torch.Tensor(X), torch.Tensor(A), torch.Tensor(D)), label
 
         except BaseException as e:
             print('Could not get features for PDBID {}'.format(pdbid))
@@ -52,6 +50,7 @@ def accuracy(output, label):
     pred = output.unsqueeze(0).max(1)[1].type_as(label)
     correct = pred.eq(label).double()
     return correct.sum() / len(label)
+
 """
 def accuracy(output, labels):
     preds = output.max(1)[1].type_as(labels)

@@ -83,6 +83,3 @@ class DistanceAwareAdjacencyMatrix(nn.Module):
         A2[:dim_p, -dim_l:] = torch.transpose(D, 0, 1)
 
         return A2
-        
-
-    
