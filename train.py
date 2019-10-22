@@ -31,7 +31,7 @@ if args.cuda:
 
 # Load data
 dataset = PDBBindDataset(num_positive=args.num_positive,
-                         num_negative=args.num_negative)
+                         num_negative=args.num_negative)/
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
 split = int(np.floor(args.train_test_split * dataset_size))
@@ -69,12 +69,6 @@ optimizer = optim.Adam(model.parameters(),
 
 if args.cuda:
     model.cuda()
-    #features = features.cuda()
-    #adj = adj.cuda()
-    #labels = labels.cuda()
-    #idx_train = idx_train.cuda()
-    #idx_val = idx_val.cuda()
-    #idx_test = idx_test.cuda()
 
 
 def train(epoch):
@@ -82,56 +76,99 @@ def train(epoch):
     model.train()
     optimizer.zero_grad()
 
-    for feature, label in train_loader:
-        X, A, D = feature
+    losses_batch = []
+    acc_batch = []
+    for _ in range(args.batch_size): # not really "the batch"
+        try:
+            (X, A, D), label = next(iter(train_loader))
+            if args.cuda:
+                X = X.cuda()
+                A = A.cuda()
+                D = D.cuda()
+                label = label.cuda()
 
-        if args.cuda:
-            X = X.cuda()
-            A = A.cuda()
-            D = D.cuda()
-            label = label.cuda()
+            output = model(X=X.squeeze(), 
+                           A=A.squeeze(), 
+                           D=D.squeeze())
+            loss_train = F.nll_loss(output.unsqueeze(0), label.long())
+            losses_batch.append(loss_train)
+            acc_batch.append(accuracy(output, label))
 
-        output = model(X=X.squeeze(), 
-                       A=A.squeeze(), 
-                       D=D.squeeze())
-        loss_train = F.nll_loss(output.unsqueeze(0), label.long())
-        acc_train = accuracy(output, label)
-        print(loss_train)
-        print(acc_train)
-        loss_train.backward()
-        optimizer.step()
-    
+            loss_train.backward()
+            optimizer.step()
+        except BaseException as e:
+            print(e)
+            pass
+
+    avg_loss = torch.mean(torch.Tensor(losses_batch))
+    avg_acc = torch.mean(torch.Tensor(acc_batch))
     print('Epoch: {:04d}'.format(epoch+1),
-          'loss_train: {:.4f}'.format(loss_train.data.item()),
-          'acc_train: {:.4f}'.format(acc_train.data.item()),
-          #'loss_val: {:.4f}'.format(loss_val.data.item()),
-          #'acc_val: {:.4f}'.format(acc_val.data.item()),
+          'loss_train: {:.4f}'.format(avg_loss.data.item()),
+          'acc_train: {:.4f}'.format(avg_acc.data.item()),
           'time: {:.4f}s'.format(time.time() - t))
-    
-    return loss_val.data.item()
+
+    return avg_loss.data.item()
+
+def evaluate():
+    model.eval()
+
+    losses_batch = []
+    acc_batch = []
+    for _ in args.batch_size:
+        try:
+            (X, A, D), label = next(iter(val_loader))
+
+            if args.cuda:
+                X = X.cuda()
+                A = A.cuda()
+                D = D.cuda()
+                label = label.cuda()
+
+            output = model(X=X.squeeze(), 
+                        A=A.squeeze(), 
+                        D=D.squeeze())
+            loss_test = F.nll_loss(output.unsqueeze(0), label.long())
+            acc_test = accuracy(output, label)
+        except BaseException as e:
+            print(e)
+        
+    avg_loss = torch.mean(torch.Tensor(losses_batch))
+    avg_acc = torch.mean(torch.Tensor(acc_batch))
+
+    print("Validation set results:",
+          "loss= {:.4f}".format(avg_loss.data),
+          "accuracy= {:.4f}".format(avg_acc.data))
 
 
 def compute_test():
     model.eval()
 
-    for feature, label in test_loader:
-        X, A, D = feature
+    losses_batch = []
+    acc_batch = []
+    for _ in args.batch_size:
+        try:
+            (X, A, D), label = next(iter(test_loader))
 
-        if args.cuda:
-            X = X.cuda()
-            A = A.cuda()
-            D = D.cuda()
-            label = label.cuda()
+            if args.cuda:
+                X = X.cuda()
+                A = A.cuda()
+                D = D.cuda()
+                label = label.cuda()
 
-        output = model(X=X.squeeze(), 
-                       A=A.squeeze(), 
-                       D=D.squeeze())
-        loss_test = F.nll_loss(output.unsqueeze(0), label.long())
-        acc_test = accuracy(output, label)
+            output = model(X=X.squeeze(), 
+                        A=A.squeeze(), 
+                        D=D.squeeze())
+            loss_test = F.nll_loss(output.unsqueeze(0), label.long())
+            acc_test = accuracy(output, label)
+        except BaseException as e:
+            print(e)
+        
+    avg_loss = torch.mean(torch.Tensor(losses_batch))
+    avg_acc = torch.mean(torch.Tensor(acc_batch))
 
     print("Test set results:",
-          "loss= {:.4f}".format(loss_test.data[0]),
-          "accuracy= {:.4f}".format(acc_test.data[0]))
+          "loss= {:.4f}".format(avg_loss.data),
+          "accuracy= {:.4f}".format(avg_acc.data))
 
 # Train model
 t_total = time.time()
@@ -140,51 +177,27 @@ bad_counter = 0
 best = args.epochs + 1
 best_epoch = 0
 for epoch in range(args.epochs):
-    try:
-        loss_values.append(train(epoch))
+    loss_values.append(train(epoch))
 
-        if epoch % 20 == 0:
-            model.train()
-            for feature, label in val_loader:
-                X, A, D = feature
+    if epoch % 20 == 0:
+        evaluate()
+    torch.save(model.state_dict(), '{}.pkl'.format(epoch))
 
-                if args.cuda:
-                    X = X.cuda()
-                    A = A.cuda()
-                    D = D.cuda()
-                    label = label.cuda()
+    if loss_values[-1] < best:
+        best = loss_values[-1]
+        best_epoch = epoch
+        bad_counter = 0
+    else:
+        bad_counter += 1
 
-                output = model(X=X.squeeze(), 
-                               A=A.squeeze(), 
-                               D=D.squeeze())
-                loss_val = F.nll_loss(output.unsqueeze(0), label.long())
-                acc_val = accuracy(output, label)
+    if bad_counter == args.patience:
+        break
 
-            print('Epoch: {:04d}'.format(epoch+1),
-                  #'loss_train: {:.4f}'.format(loss_train.data.item()),
-                  #'acc_train: {:.4f}'.format(acc_train.data.item()),
-                  'loss_val: {:.4f}'.format(loss_val.data.item()),
-                  'acc_val: {:.4f}'.format(acc_val.data.item()),
-                  #'time: {:.4f}s'.format(time.time() - t)
-                  )
-        torch.save(model.state_dict(), '{}.pkl'.format(epoch))
-        if loss_values[-1] < best:
-            best = loss_values[-1]
-            best_epoch = epoch
-            bad_counter = 0
-        else:
-            bad_counter += 1
-
-        if bad_counter == args.patience:
-            break
-
-        files = glob.glob('*.pkl')
-        for file in files:
-            epoch_nb = int(file.split('.')[0])
-            if epoch_nb < best_epoch:
-                os.remove(file)
-    except:
-        pass
+    files = glob.glob('*.pkl')
+    for file in files:
+        epoch_nb = int(file.split('.')[0])
+        if epoch_nb < best_epoch:
+            os.remove(file)
 
 files = glob.glob('*.pkl')
 for file in files:
