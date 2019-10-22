@@ -69,12 +69,12 @@ optimizer = optim.Adam(model.parameters(),
 
 if args.cuda:
     model.cuda()
-    features = features.cuda()
-    adj = adj.cuda()
-    labels = labels.cuda()
-    idx_train = idx_train.cuda()
-    idx_val = idx_val.cuda()
-    idx_test = idx_test.cuda()
+    #features = features.cuda()
+    #adj = adj.cuda()
+    #labels = labels.cuda()
+    #idx_train = idx_train.cuda()
+    #idx_val = idx_val.cuda()
+    #idx_test = idx_test.cuda()
 
 
 def train(epoch):
@@ -84,6 +84,13 @@ def train(epoch):
 
     for feature, label in train_loader:
         X, A, D = feature
+
+        if args.cuda:
+            X = X.cuda()
+            A = A.cuda()
+            D = D.cuda()
+            label = label.cuda()
+
         output = model(X=X.squeeze(), 
                        A=A.squeeze(), 
                        D=D.squeeze())
@@ -109,10 +116,17 @@ def compute_test():
 
     for feature, label in test_loader:
         X, A, D = feature
+
+        if args.cuda:
+            X = X.cuda()
+            A = A.cuda()
+            D = D.cuda()
+            label = label.cuda()
+
         output = model(X=X.squeeze(), 
                        A=A.squeeze(), 
                        D=D.squeeze())
-        loss_test = F.nll_loss(output, label)
+        loss_test = F.nll_loss(output.unsqueeze(0), label.long())
         acc_test = accuracy(output, label)
 
     print("Test set results:",
@@ -133,10 +147,17 @@ for epoch in range(args.epochs):
             model.train()
             for feature, label in val_loader:
                 X, A, D = feature
+
+                if args.cuda:
+                    X = X.cuda()
+                    A = A.cuda()
+                    D = D.cuda()
+                    label = label.cuda()
+
                 output = model(X=X.squeeze(), 
-                            A=A.squeeze(), 
-                            D=D.squeeze())
-                loss_val = F.nll_loss(output, label)
+                               A=A.squeeze(), 
+                               D=D.squeeze())
+                loss_val = F.nll_loss(output.unsqueeze(0), label.long())
                 acc_val = accuracy(output, label)
 
             print('Epoch: {:04d}'.format(epoch+1),
