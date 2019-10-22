@@ -14,7 +14,7 @@ class Model(nn.Module):
         self.adjacency_matrix_transformer = DAAM()
         self.dropout = dropout
 
-        self.attentions = [GAGAL(n_feat=n_feat, dim_attn=dim_attn, dropout=dropout)]
+        self.attentions = [GAGAL(n_feat=n_feat, n_hid=dim_attn, dropout=dropout)]
         self.attentions += \
             [GAGAL(n_feat=dim_attn, n_hid=dim_attn, dropout=dropout) 
             for _ in range(n_attns-1)]
@@ -34,13 +34,14 @@ class Model(nn.Module):
 
     def forward(self, X, A, D):
         A2 = self.adjacency_matrix_transformer(A, D)
-        X2.data = X.clone()
+
+        X2 = X.clone().detach()
 
         X = F.dropout(X, self.dropout, training=self.training)
         X2 = F.dropout(X2, self.dropout, training=self.training)
 
         # TODO Try multihead attn instead of linear?
-        for attn in self.attns:
+        for attn in self.attentions:
             X = attn(X=X, A=A)
             X2 = attn(X=X2, A=A2)
 
@@ -53,4 +54,4 @@ class Model(nn.Module):
 
         out =  self.out_layer(X_graph)
 
-        return F.log_softmax(out, dim=1)
+        return F.log_softmax(out)

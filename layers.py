@@ -20,7 +20,7 @@ class GateAugmentedGraphAttentionLayer(nn.Module):
         nn.init.xavier_uniform_(self.W.data, gain=1.414)
         self.E = nn.Parameter(torch.zeros(size=(n_hid, n_hid)))
         nn.init.xavier_uniform_(self.E.data, gain=1.414)
-        self.U = nnParameter(torch.zeros(size=(n_feat + n_hid, 1)))
+        self.U = nn.Parameter(torch.zeros(size=(n_feat + n_hid, 1)))
         nn.init.xavier_uniform_(self.U.data, gain=1.414)
         self.b = nn.Parameter(torch.zeros(size=(1, 1)))
         nn.init.xavier_uniform_(self.b.data, gain=1.414)
@@ -33,20 +33,20 @@ class GateAugmentedGraphAttentionLayer(nn.Module):
         # symmetric attention as in paper
         attention = torch.mm(torch.mm(h, self.E), 
                              torch.transpose(h, 0, 1)) + \
-                    torch.mm(torch.mm(h, torch.transpose(E, 0, 1)), 
+                    torch.mm(torch.mm(h, torch.transpose(self.E, 0, 1)), 
                              torch.transpose(h, 0, 1))
         # softmax just on the nodes connected together
-        mask = A > 0
+        mask = (A > 0).float()
         attention = torch.mul(F.softmax(torch.mul(attention, mask)), A)
         attention = F.dropout(attention, self.dropout)
         h_prime = torch.matmul(attention, h)
 
         # gate augmentation
-        gate = F.sigmoid(torch.mm(torch.cat([X, h], dim=1), self.U)\
-            + torch.cat([N * [self.b]])).view((N, 1))
+        gate = F.sigmoid(torch.mm(torch.cat([X.squeeze(), h], dim=1), self.U)\
+            + torch.cat(N * [self.b]).view((N, 1)))
         X_out = torch.mul(gate, h) \
-            + torch.mul((torch.ones(gate.size) - gate), h_prime)
-
+            + torch.mul((torch.ones(gate.size()) - gate), h_prime)
+        
         return X_out
 
 
@@ -71,14 +71,15 @@ class DistanceAwareAdjacencyMatrix(nn.Module):
         Output:
             A2: Adjacency Matrix.
         """
-
         mask = (D > 0).float()
         D = torch.exp(-(D - self.mu.squeeze()) ** 2)\
             / self.sigma.squeeze()
+        D = (D * mask)
 
         (dim_l, dim_p) = D.size()
-        A2.data = A.clone()
-        A2[-dim_l:, :dim_p] = D
+
+        A2 = A.clone().detach()
+        A2[-dim_l:, :dim_p].data = D.data
         A2[:dim_p, -dim_l:] = torch.transpose(D, 0, 1)
 
         return A2

@@ -26,14 +26,14 @@ _possible_chirality_list = ['R', 'S']
 def one_hot_encoding(x, set):
     if x not in set:
         raise Exception("input {0} not in allowable set{1}:".format(x, set))
-    return list(map(lambda s: x == s, set))
+    return list(map(lambda s: int(x == s), set))
 
 
 def one_hot_encoding_unk(x, set):
     """Maps inputs not in the allowable set to the last element."""
     if x not in set:
         x = set[-1]
-    return list(map(lambda s: x == s, set))
+    return list(map(lambda s: int(x == s), set))
 
 
 def encode_atom(atom, bool_id_feat=False,
@@ -253,9 +253,9 @@ def get_pdbbind_features(pdbid, data_dir='./data/pdbbind'):
     num_l_atoms = len(adj_list_l)
     n_feat = node_feat_p.shape[1]
 
-    X_protein = np.concat((node_feat_p, np.zeros((num_l_atoms, n_feat))))
-    X_ligand = np.concat((np.zeros((num_p_atoms, n_feat)), node_feat_l))
-    X = np.concat((X_protein, X_ligand), axis=1)
+    X_protein = np.concatenate((node_feat_p, np.zeros((num_l_atoms, n_feat))))
+    X_ligand = np.concatenate((np.zeros((num_p_atoms, n_feat)), node_feat_l))
+    X = np.concatenate((X_protein, X_ligand), axis=1)
 
     A = build_adjacency_matrix(adj_list_c)
 

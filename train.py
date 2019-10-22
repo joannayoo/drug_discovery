@@ -11,7 +11,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
-from torch.utils.data.sampler import SubsetRandomSampler, DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
+from torch.utils.data import DataLoader
 
 from data_utils import PDBBindDataset, accuracy
 from models import Model
@@ -35,19 +36,27 @@ dataset_size = len(dataset)
 indices = list(range(dataset_size))
 split = int(np.floor(args.train_test_split * dataset_size))
 np.random.shuffle(indices)
-train_indices, test_indices = indices[split:], indices[:split]
+train_indices, test_indices, val_indices \
+    = indices[2*split:], indices[:split], indices[split:2*split]
 
 train_sampler = SubsetRandomSampler(train_indices)
 test_sampler = SubsetRandomSampler(test_indices)
+val_sampler = SubsetRandomSampler(val_indices)
 
 train_loader = DataLoader(dataset, 
-                          batch_size=args.batch_size,
+                          #batch_size=args.batch_size,
+                          batch_size=1, # Loads graph one at a time
                           sampler=train_sampler)
 test_loader = DataLoader(dataset, 
-                         batch_size=args.batch_size,
+                         #batch_size=args.batch_size,
+                         batch_size=1,
                          sampler=test_sampler)
+val_loader = DataLoader(dataset, 
+                        #batch_size=args.batch_size,
+                        batch_size=1,
+                        sampler=val_sampler)
 
-model = Model(n_out=dataset.__nlabels__()
+model = Model(n_out=dataset.__nlabels__(),
               n_feat=dataset.__nfeats__(), 
               n_attns=args.n_attns, 
               n_dense=args.n_dense,
@@ -68,46 +77,56 @@ if args.cuda:
     idx_test = idx_test.cuda()
 
 
-
 def train(epoch):
     t = time.time()
     model.train()
     optimizer.zero_grad()
 
-    acc_train = []
     for feature, label in train_loader:
         X, A, D = feature
-        output = model(X=X, A=A, D=D)
-        loss_train = F.nll_loss(output, label)
-        acc_train.append(accuracy(output, label))
+        output = model(X=X.squeeze(), 
+                       A=A.squeeze(), 
+                       D=D.squeeze())
+        loss_train = F.nll_loss(output.unsqueeze(0), label.long())
+        acc_train = accuracy(output, label)
         loss_train.backward()
         optimizer.step()
-    acc_train = sum(acc_train) / len(acc_train)
-
-    """
+    
     if not args.fastmode:
         # Evaluate validation set performance separately,
         # deactivates dropout during validation run.
         model.eval()
         output = model(features, adj)
-    
-    loss_val = F.nll_loss(output[idx_val], labels[idx_val])
-    acc_val = accuracy(output[idx_val], labels[idx_val])
+
+    for feature, label in val_loader:
+        X, A, D = feature
+        output = model(X=X.squeeze(), 
+                       A=A.squeeze(), 
+                       D=D.squeeze())
+        loss_val = F.nll_loss(output, label)
+        acc_val = accuracy(output, label)
+
     print('Epoch: {:04d}'.format(epoch+1),
           'loss_train: {:.4f}'.format(loss_train.data.item()),
           'acc_train: {:.4f}'.format(acc_train.data.item()),
           'loss_val: {:.4f}'.format(loss_val.data.item()),
           'acc_val: {:.4f}'.format(acc_val.data.item()),
           'time: {:.4f}s'.format(time.time() - t))
-    """
+    
     return loss_val.data.item()
 
 
 def compute_test():
     model.eval()
-    output = model(features, adj)
-    loss_test = F.nll_loss(output[idx_test], labels[idx_test])
-    acc_test = accuracy(output[idx_test], labels[idx_test])
+
+    for feature, label in test_loader:
+        X, A, D = feature
+        output = model(X=X.squeeze(), 
+                       A=A.squeeze(), 
+                       D=D.squeeze())
+        loss_test = F.nll_loss(output, label)
+        acc_test = accuracy(output, label)
+
     print("Test set results:",
           "loss= {:.4f}".format(loss_test.data[0]),
           "accuracy= {:.4f}".format(acc_test.data[0]))
@@ -119,24 +138,27 @@ bad_counter = 0
 best = args.epochs + 1
 best_epoch = 0
 for epoch in range(args.epochs):
-    loss_values.append(train(epoch))
+    try:
+        loss_values.append(train(epoch))
 
-    torch.save(model.state_dict(), '{}.pkl'.format(epoch))
-    if loss_values[-1] < best:
-        best = loss_values[-1]
-        best_epoch = epoch
-        bad_counter = 0
-    else:
-        bad_counter += 1
+        torch.save(model.state_dict(), '{}.pkl'.format(epoch))
+        if loss_values[-1] < best:
+            best = loss_values[-1]
+            best_epoch = epoch
+            bad_counter = 0
+        else:
+            bad_counter += 1
 
-    if bad_counter == args.patience:
-        break
+        if bad_counter == args.patience:
+            break
 
-    files = glob.glob('*.pkl')
-    for file in files:
-        epoch_nb = int(file.split('.')[0])
-        if epoch_nb < best_epoch:
-            os.remove(file)
+        files = glob.glob('*.pkl')
+        for file in files:
+            epoch_nb = int(file.split('.')[0])
+            if epoch_nb < best_epoch:
+                os.remove(file)
+    except:
+        pass
 
 files = glob.glob('*.pkl')
 for file in files:
